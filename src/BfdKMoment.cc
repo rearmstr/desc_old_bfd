@@ -22,8 +22,8 @@
  */
 
 
-#include "lsst/desc/bfd/BfdKMoment.h"
-#include "lsst/desc/bfd/ImageConvert.h"
+#include "lsst/desc/old/bfd/BfdKMoment.h"
+#include "lsst/desc/old/bfd/ImageConvert.h"
 
 //#include "lsst/log/Log.h"
 #include "lsst/pex/exceptions.h"
@@ -55,7 +55,7 @@
 namespace BFD = old_bfd;
 
 
-namespace lsst { namespace desc { namespace bfd {
+namespace lsst { namespace desc { namespace old { namespace bfd {
 
 
  ////////////////////////////////////////////////////////////////////////////////////////////
@@ -202,56 +202,56 @@ namespace lsst { namespace desc { namespace bfd {
      )
  {
      BfdKMomentResultKey r;
-     r._momentsKey = schema.addField<afw::table::Array<float> >(name+".moments", "k-space moments", NMoment);
-     r._momentsCovKey = schema.addField<afw::table::Array<float> >(name+".momentsCov",
+     r._momentsKey = schema.addField<afw::table::Array<float> >(name+"_moments", "k-space moments", NMoment);
+     r._momentsCovKey = schema.addField<afw::table::Array<float> >(name+"_momentsCov",
                                                                    "covariance of k-space moments",
                                                                    NMoment*NMoment);
-     r._momentsPsfKey = schema.addField<afw::table::Array<float> >(name+".moments.psf",
+     r._momentsPsfKey = schema.addField<afw::table::Array<float> >(name+"_moments_psf",
                                                                    "k-space moments of Psf", NMoment);
-     r._centerKey = afw::table::PointKey<double>::addFields(schema, name+".center",
+     r._centerKey = afw::table::PointKey<double>::addFields(schema, name+"_center",
  							   "center where moments were evaluated", "pixel");
-     r._shiftKey = afw::table::PointKey<double>::addFields(schema, name+".shift",
+     r._shiftKey = afw::table::PointKey<double>::addFields(schema, name+"_shift",
  							  "amount center was shifted", "pixel");
-     r._flagsKey[0] = schema.addField<afw::table::Flag>(name+".flags", "failure flag");
-     r._flagsKey[1] = schema.addField<afw::table::Flag>(name+".flags.shift.failed", "shift failed");
-     r._flagsKey[2] = schema.addField<afw::table::Flag>(name+".flags.shift.large", "shift too large");
+     r._flagsKey[0] = schema.addField<afw::table::Flag>(name+"_flags", "failure flag");
+     r._flagsKey[1] = schema.addField<afw::table::Flag>(name+"_flags_shift_failed", "shift failed");
+     r._flagsKey[2] = schema.addField<afw::table::Flag>(name+"_flags_shift_large", "shift too large");
      r._flagsKey[3] = schema.addField<afw::table::Flag>(
-         name + ".flags.shift.centroid.large",
+         name + "_flags.shift.centroid.large",
          "centroid of shifted moments too large");
-     r._flagsKey[4] = schema.addField<afw::table::Flag>(name+".flags.too-big", "pixel region too big");
-     r._flagsKey[5] = schema.addField<afw::table::Flag>(name+".flags.variance",
+     r._flagsKey[4] = schema.addField<afw::table::Flag>(name+"_flags_too-big", "pixel region too big");
+     r._flagsKey[5] = schema.addField<afw::table::Flag>(name+"_flags_variance",
                                                         "problem with variance calculation");
-     r._flagsKey[6] = schema.addField<afw::table::Flag>(name+".flags.parent",
+     r._flagsKey[6] = schema.addField<afw::table::Flag>(name+"_flags_parent",
                                                         "parent with children");
-     r._flagsKey[7] = schema.addField<afw::table::Flag>(name+".flags.flux_negative",
+     r._flagsKey[7] = schema.addField<afw::table::Flag>(name+"_flags_flux_negative",
                                                         "bad moment flux");
-     r._flagsKey[8] = schema.addField<afw::table::Flag>(name+".flags.size_negative",
+     r._flagsKey[8] = schema.addField<afw::table::Flag>(name+"_flags_size_negative",
                                                         "bad moment size");
-     r._flagsKey[9] = schema.addField<afw::table::Flag>(name+".flags.saturated.center",
+     r._flagsKey[9] = schema.addField<afw::table::Flag>(name+"_flags_saturated_center",
                                                         "saturated center");
-     r._flagsKey[10] = schema.addField<afw::table::Flag>(name+".flags.footprint-empty",
+     r._flagsKey[10] = schema.addField<afw::table::Flag>(name+"_flags_footprint-empty",
                                                         "empty footprint");
      return r;
 
  }
 
  BfdKMomentResultKey::BfdKMomentResultKey(afw::table::Schema schema, std::string name) {
-     _momentsKey = schema.find<afw::table::Array<float> >(name+".moments").key;
-     _momentsCovKey = schema.find<afw::table::Array<float> >(name+".momentsCov").key;
-     _momentsPsfKey = schema.find<afw::table::Array<float> >(name+".moments.psf").key;
-     _centerKey = lsst::afw::table::PointKey<double>(schema[name+".center"]);
-     _shiftKey = lsst::afw::table::PointKey<double>(schema[name+".shift"]);
-     _flagsKey[0] = schema.find<afw::table::Flag>(name+".flags").key;
-     _flagsKey[1] = schema.find<afw::table::Flag>(name+".flags.shift.failed").key;
-     _flagsKey[2] = schema.find<afw::table::Flag>(name+".flags.shift.large").key;
-     _flagsKey[3] = schema.find<afw::table::Flag>(name+".flags.shift.centroid.large").key;
-     _flagsKey[4] = schema.find<afw::table::Flag>(name+".flags.too-big").key;
-     _flagsKey[5] = schema.find<afw::table::Flag>(name+".flags.variance").key;
-     _flagsKey[6] = schema.find<afw::table::Flag>(name+".flags.parent").key;
-     _flagsKey[7] = schema.find<afw::table::Flag>(name+".flags.flux_negative").key;
-      _flagsKey[8] = schema.find<afw::table::Flag>(name+".flags.size_negative").key;
-      _flagsKey[9] = schema.find<afw::table::Flag>(name+".flags.saturated.center").key;
-     _flagsKey[10] = schema.find<afw::table::Flag>(name+".flags.footprint-empty").key;
+     _momentsKey = schema.find<afw::table::Array<float> >(name+"_moments").key;
+     _momentsCovKey = schema.find<afw::table::Array<float> >(name+"_momentsCov").key;
+     _momentsPsfKey = schema.find<afw::table::Array<float> >(name+"_moments.psf").key;
+     _centerKey = lsst::afw::table::PointKey<double>(schema[name+"_center"]);
+     _shiftKey = lsst::afw::table::PointKey<double>(schema[name+"_shift"]);
+     _flagsKey[0] = schema.find<afw::table::Flag>(name+"_flags").key;
+     _flagsKey[1] = schema.find<afw::table::Flag>(name+"_flags_shift_failed").key;
+     _flagsKey[2] = schema.find<afw::table::Flag>(name+"_flags_shift_large").key;
+     _flagsKey[3] = schema.find<afw::table::Flag>(name+"_flags_shift)centroid.large").key;
+     _flagsKey[4] = schema.find<afw::table::Flag>(name+"_flags_too-big").key;
+     _flagsKey[5] = schema.find<afw::table::Flag>(name+"_flags_variance").key;
+     _flagsKey[6] = schema.find<afw::table::Flag>(name+"_flags_parent").key;
+     _flagsKey[7] = schema.find<afw::table::Flag>(name+"_flags_flux_negative").key;
+      _flagsKey[8] = schema.find<afw::table::Flag>(name+"_flags_size_negative").key;
+      _flagsKey[9] = schema.find<afw::table::Flag>(name+"_flags_saturated.center").key;
+     _flagsKey[10] = schema.find<afw::table::Flag>(name+"_flags_footprint-empty").key;
  }
 
  void BfdKMomentResultKey::set(afw::table::BaseRecord & record, BfdKMomentResult const & value) const {
@@ -1301,27 +1301,27 @@ BfdKMomentInfoResultKey BfdKMomentInfoResultKey::addFields(
     )
 {
     BfdKMomentInfoResultKey r;
-    r._momentsKey = schema.addField<afw::table::Array<float> >(name+".moments",
+    r._momentsKey = schema.addField<afw::table::Array<float> >(name+"_moments",
                                                                     "k-space moments", NMoment);
-    r._momentsDerivKey = schema.addField<afw::table::Array<float> >(name+".momentsDeriv",
+    r._momentsDerivKey = schema.addField<afw::table::Array<float> >(name+"_momentsDeriv",
                                                                     "k-space moments and derivatices", NMoment*Npqr);
-    r._weightKey = schema.addField<float>(name+".weight","weight");
-    r._selectionWeightKey = schema.addField<float>(name+".selectionWeight","selection weight");
-    r._idKey = schema.addField<int>(name+".id","id");
-    r._flagsKey[0] = schema.addField<afw::table::Flag>(name+".flags", "failure flag");
-    r._flagsKey[1] = schema.addField<afw::table::Flag>(name+".flags.shift", "shift was too large");
+    r._weightKey = schema.addField<float>(name+"_weight","weight");
+    r._selectionWeightKey = schema.addField<float>(name+"_selectionWeight","selection weight");
+    r._idKey = schema.addField<int>(name+"_id","id");
+    r._flagsKey[0] = schema.addField<afw::table::Flag>(name+"_flags", "failure flag");
+    r._flagsKey[1] = schema.addField<afw::table::Flag>(name+"_flags_shift", "shift was too large");
     return r;
 
 }
 
 BfdKMomentInfoResultKey::BfdKMomentInfoResultKey(afw::table::Schema schema, std::string name) {
-    _momentsKey = schema.find<afw::table::Array<float> >(name+".moments").key;
-    _momentsDerivKey = schema.find<afw::table::Array<float> >(name+".momentsDeriv").key;
-    _weightKey = schema.find<float>(name+".weight").key;
-    _selectionWeightKey = schema.find<float>(name+".selectionWeight").key;
-    _idKey = schema.find<int>(name+".id").key;
-    _flagsKey[0] = schema.find<afw::table::Flag>(name+".flags").key;
-    _flagsKey[1] = schema.find<afw::table::Flag>(name+".flags.shift").key;
+    _momentsKey = schema.find<afw::table::Array<float> >(name+"_moments").key;
+    _momentsDerivKey = schema.find<afw::table::Array<float> >(name+"_momentsDeriv").key;
+    _weightKey = schema.find<float>(name+"_weight").key;
+    _selectionWeightKey = schema.find<float>(name+"_selectionWeight").key;
+    _idKey = schema.find<int>(name+"_id").key;
+    _flagsKey[0] = schema.find<afw::table::Flag>(name+"_flags").key;
+    _flagsKey[1] = schema.find<afw::table::Flag>(name+"_flags_shift").key;
 }
 
 
@@ -1362,18 +1362,18 @@ BfdPqrKey BfdPqrKey::addFields(
     )
 {
     BfdPqrKey r;
-    r._pqrKey = schema.addField<afw::table::Array<float> >(name+".pqr", "Pqr result", NMoment);
-    r._nTemplatesKey = schema.addField<int>(name+".nTemplates", "number of templates");
-    r._nUniqueKey = schema.addField<int>(name+".nUnique", "number of unique templates");
-    r._flagsKey[0] = schema.addField<afw::table::Flag>(name+".flags", "failure flag");
+    r._pqrKey = schema.addField<afw::table::Array<float> >(name+"_pqr", "Pqr result", NMoment);
+    r._nTemplatesKey = schema.addField<int>(name+"_nTemplates", "number of templates");
+    r._nUniqueKey = schema.addField<int>(name+"_nUnique", "number of unique templates");
+    r._flagsKey[0] = schema.addField<afw::table::Flag>(name+"_flags", "failure flag");
     return r;
 }
 
 BfdPqrKey::BfdPqrKey(afw::table::Schema schema, std::string name) {
-    _pqrKey = schema.find<afw::table::Array<float> >(name+".pqr").key;
-    _nTemplatesKey = schema.find<int>(name+".nTemplates").key;
-    _nUniqueKey = schema.find<int>(name+".nUnique").key;
-    _flagsKey[0] = schema.find<afw::table::Flag>(name+".flags").key;
+    _pqrKey = schema.find<afw::table::Array<float> >(name+"_pqr").key;
+    _nTemplatesKey = schema.find<int>(name+"_nTemplates").key;
+    _nUniqueKey = schema.find<int>(name+"_nUnique").key;
+    _flagsKey[0] = schema.find<afw::table::Flag>(name+"_flags").key;
 }
 
 
@@ -1397,5 +1397,5 @@ BfdPqrResult BfdPqrKey::get(afw::table::BaseRecord const & record) const {
     // }
     return result;
 }
-}}}
+}}}}
 
