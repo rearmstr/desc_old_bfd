@@ -1,6 +1,6 @@
 # -*- python -*-
 from lsst.sconsUtils import scripts, env
-scripts.BasicSConstruct("desc_bfd")
+scripts.BasicSConstruct("desc_old_bfd")
 env.Append(CCFLAGS = ['-DFFLOAT',# To make bfd code happy
                       '-fopenmp','-g',
                       '-Wno-reorder','-Wno-comment', '-Wno-sign-compare','-Wno-parentheses',# To supress warnings from bfd code
