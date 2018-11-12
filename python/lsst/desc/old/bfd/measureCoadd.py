@@ -151,20 +151,20 @@ class MeasureCoaddTask(MeasureImageTask):
     def selection(self, source, ref):
         
         if ref.getParent()==0 and ref.get('deblend_nchild')>0:
-            source.set('bfd.flags.parent',True)
-            source.set('bfd.flags',True)
+            source.set('bfd_flags_parent',True)
+            source.set('bfd_flags',True)
             return False
         if ref.getFootprint().getArea() > self.config.maxArea:
-            source.set('bfd.flags.too-big',True)
-            source.set('bfd.flags',True)
+            source.set('bfd_flags_too-big',True)
+            source.set('bfd_flags',True)
             return False
         if ref.getFootprint().getArea() == 0:
-            source.set('bfd.flags.footprint-empty',True)
-            source.set('bfd.flags',True)
+            source.set('bfd_flags.footprint-empty',True)
+            source.set('bfd_flags',True)
             return False
         if ref.get('flags_pixel_saturated_center'):
-            source.set('bfd.flags.saturated.center',True)
-            source.set('bfd.flags',True)
+            source.set('bfd_flags_saturated.center',True)
+            source.set('bfd_flags',True)
             return False
         if numpy.isnan(source.get('noise_variance')):
             return False
@@ -265,8 +265,8 @@ class MeasureCoaddTask(MeasureImageTask):
                 break
 
             if setFlags and failed:
-                source.set('bfd.flags.variance', True)
-                source.set('bfd.flags', True)
+                source.set('bfd_flags_variance', True)
+                source.set('bfd_flags', True)
                 return False
 
             source.set('noise_variance', float(varSrc))
