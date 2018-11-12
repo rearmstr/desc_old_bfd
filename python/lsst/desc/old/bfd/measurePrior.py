@@ -605,9 +605,9 @@ class MeasurePriorTask(MeasureCoaddTask):
                         if self.config.verbose: self.log.info("Does not pass selection criteria")
                         continue
 
-                    if moment.get('bfd.flags'):
+                    if moment.get('bfd_flags'):
                         continue
-                    f = moment.get('bfd.moments')[0]
+                    f = moment.get('bfd_moments')[0]
                     dflux = 0
                     dflux = max(dflux, minFlux - f)
                     dflux = max(dflux, f - maxFlux)
@@ -622,13 +622,13 @@ class MeasurePriorTask(MeasureCoaddTask):
                     if not self.preMeasure(source, ref, inputs.exposure):
                         continue
 
-                    if (moment.get('bfd.momentsCov')[0] > self.config.maxVar  or
-                        moment.get('bfd.momentsCov')[0] < self.config.minVar) :
-                        if self.config.verbose: self.log.info("Does not pass variance cuts %f %0.2f/%0.2f"%(moment.get('bfd.momentsCov')[0],self.config.minVar,self.config.maxVar))
+                    if (moment.get('bfd_momentsCov')[0] > self.config.maxVar  or
+                        moment.get('bfd_momentsCov')[0] < self.config.minVar) :
+                        if self.config.verbose: self.log.info("Does not pass variance cuts %f %0.2f/%0.2f"%(moment.get('bfd_momentsCov')[0],self.config.minVar,self.config.maxVar))
                         continue
 
-                    sn = moment.get('bfd.moments')[0]/numpy.sqrt(moment.get('bfd.momentsCov')[0])
-                    if self.config.verbose: self.log.info("Processing galaxy %d with S/N=%0.2f, centroid %0.2f,%0.2f"% (i,sn,moment.get('bfd.center_x'),moment.get('bfd.center_y')))
+                    sn = moment.get('bfd_moments')[0]/numpy.sqrt(moment.get('bfd_momentsCov')[0])
+                    if self.config.verbose: self.log.info("Processing galaxy %d with S/N=%0.2f, centroid %0.2f,%0.2f"% (i,sn,moment.get('bfd_center_x'),moment.get('bfd_center_y')))
 
                     # Weight is 1, unless using pdf
                     weight = 1./self.config.sample
@@ -710,7 +710,7 @@ class MeasurePriorTask(MeasureCoaddTask):
                     try:
                         if self.config.verbose:
                              self.log.info("Passed cuts")
-                        pos = lsst.afw.geom.Point2D(moment.get('bfd.center_x'),moment.get('bfd.center_y'))
+                        pos = lsst.afw.geom.Point2D(moment.get('bfd_center_x'),moment.get('bfd_center_y'))
                         priorGalaxy = bfd.PriorGalaxy(bfd_control)
                         passed = priorGalaxy.addImage(ref, inputs.exposure, pos, source.get(noiseKey), True)
                         if passed is False:
