@@ -36,8 +36,6 @@ class ProcessBfdPatchTask(pipeBase.CmdLineTask):
     def run(self, patchRef):
         """
         """
-        print('running prep')
-        
         try:
             self.measure.prep()
         except Exception as e:
@@ -50,7 +48,7 @@ class ProcessBfdPatchTask(pipeBase.CmdLineTask):
             self.log.warn("Failed to process %s: %s\n" % (patchRef.dataId, e))
             import traceback
             traceback.print_exc()
-            return None
+            return
 
 
     def write(self, cache, struct, focusMd=None):
