@@ -114,6 +114,7 @@ class MeasureCoaddTask(MeasureImageTask):
     def __init__(self, **kwargs):
         MeasureImageTask.__init__(self, **kwargs)
         self.dataPrefix = self.config.coaddName + "Coadd_"
+        
 
         if self.config.calculateVariance:
             self.varKey = self.schema.addField("noise_variance", doc="variance of noise", type=float)
@@ -149,8 +150,12 @@ class MeasureCoaddTask(MeasureImageTask):
             )
 
     def selection(self, source, ref):
-        
-        if ref.getParent()==0 and ref.get('deblend_nchild')>0:
+        childName = 'deblend_nchild'
+        satName = 'flags_pixel_saturated_center'
+        if self.config.oldHSC is False:
+            childName = 'deblend_nChild'
+            satName = 'base_PixelFlags_flag_saturated'
+        if ref.getParent()==0 and ref.get(childName)>0:
             source.set('bfd_flags_parent',True)
             source.set('bfd_flags',True)
             return False
@@ -162,7 +167,7 @@ class MeasureCoaddTask(MeasureImageTask):
             source.set('bfd_flags_footprint-empty',True)
             source.set('bfd_flags',True)
             return False
-        if ref.get('flags_pixel_saturated_center'):
+        if ref.get(satName):
             source.set('bfd_flags_saturated_center',True)
             source.set('bfd_flags',True)
             return False
@@ -250,7 +255,7 @@ class MeasureCoaddTask(MeasureImageTask):
                 fp.clipTo(exp.getBBox(lsst.afw.image.PARENT))
                 box = fp.getBBox()
 
-                span = fp.spans.intersectNot(exp.getMaskedImage().getMask()[box], badBit)
+                span = fp.spans.intersectNot(exp.getMaskedImage().getMask()[box, lsst.afw.image.PARENT], badBit)
                 maskImage = afwImage.Mask(box, 0)
                 span.setMask(maskImage, 0x1)
                 mask = maskImage.array==0
@@ -258,8 +263,8 @@ class MeasureCoaddTask(MeasureImageTask):
                 if span.getArea() <  self.config.minVariancePixels:
                     continue
 
-                varSrc = numpy.nanvar(image[box].getArray()[mask])
-                meanSrc = numpy.nanmean(image[box].getArray()[mask])
+                varSrc = numpy.nanvar(image[box, lsst.afw.image.PARENT].getArray()[mask])
+                meanSrc = numpy.nanmean(image[box, lsst.afw.image.PARENT].getArray()[mask])
 
                 failed = False
                 break
