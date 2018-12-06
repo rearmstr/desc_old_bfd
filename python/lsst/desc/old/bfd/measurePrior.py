@@ -30,10 +30,11 @@ from lsst.meas.base.noiseReplacer import NoiseReplacer, DummyNoiseReplacer
 
 import numpy
 from .measureCoadd import MeasureCoaddTask, MeasureCoaddConfig
-import lsst.desc.bfd as bfd
+import lsst.desc.old.bfd as bfd
 import random
 random.seed(11155)
 from lsst.daf.persistence import Butler
+from contextlib import contextmanager
 
 import scipy.spatial
 __all__ = ("MeasurePriorConfig", "MeasurePriorTask")
@@ -404,6 +405,11 @@ class MeasurePriorConfig(MeasureCoaddConfig):
         optional=True,
         doc="apply maximum ratio for selection"
     )
+    oldHSC = lsst.pex.config.Field(
+        doc = "allow ability to run on old HSC data",
+        dtype = bool,
+        default = False,
+    )
 
 #    measureMomentCov = lsst.pex.config.ConfigField(
 #        dtype=lsst.desd.bfd.bfd.measureMomentCov
@@ -441,7 +447,10 @@ class MeasurePriorTask(MeasureCoaddTask):
         """Return a lsst.pipe.base.Struct containing the Exposure to fit, catalog, measurement
         of the pixel variance and covariance of the matrix as determined by the Psf
         """
-        exposure = dataRef.get(self.config.coaddName + "Coadd_calexp", immediate=True)
+        name = self.config.coaddName + "Coadd_calexp"
+        if self.config.oldHSC:
+            name += "_hsc"
+        exposure = dataRef.get(name, immediate=True)
 
         return lsst.pipe.base.Struct(
             sources=dataRef.get(self.dataPrefix + "meas", immediate=True),
@@ -598,9 +607,9 @@ class MeasurePriorTask(MeasureCoaddTask):
                     if random.uniform(0,1) > self.config.sample:
                         continue
 
-                noiseReplacer.insertSource(ref.getId())
-                #with self.noiseContext(inputs, i, ref, noiseout) as inputs:
-                if True:
+                #noiseReplacer.insertSource(ref.getId())
+                with self.noiseContext(inputs, noiseReplacer, ref.getId()) as inputs:
+                #if True:
                     if not self.selection(source, ref):
                         if self.config.verbose: self.log.info("Does not pass selection criteria")
                         continue
@@ -728,7 +737,7 @@ class MeasurePriorTask(MeasureCoaddTask):
                         self.log.warn("Error measuring source %s : %s"
                                       % (source.getId(), err))
                     iteration +=1
-                noiseReplacer.removeSource(ref.getId())
+                #noiseReplacer.removeSource(ref.getId())
 
 
             #self.replaceWithNoise.end(inputs.exposure, inputs.sources)
@@ -829,8 +838,12 @@ class MeasurePriorTask(MeasureCoaddTask):
         return
 
     def selection(self, source, ref):
+        childName = 'deblend_nchild'
+        if self.config.oldHSC is False:
+            childName = 'deblend_nChild'
+        
         # Don't process blended parent objects
-        if ref.getParent()==0 and ref.get('deblend_nChild')>0:
+        if ref.getParent()==0 and ref.get(childName)>0:
             return False
         # For now don't process objects in a blend
         if ref.getParent()!=0 and not self.config.useBlends:
@@ -841,3 +854,16 @@ class MeasurePriorTask(MeasureCoaddTask):
             return False
 
         return True
+
+
+    @contextmanager
+    def noiseContext(self, inputs, noiseReplacer, id):
+        """Context manager that applies and removes gain
+        """
+
+        noiseReplacer.insertSource(id)
+        try:
+            yield inputs
+        finally:
+            noiseReplacer.removeSource(id)
+

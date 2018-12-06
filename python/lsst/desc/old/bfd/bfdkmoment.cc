@@ -23,6 +23,10 @@
 
 #include "pybind11/pybind11.h"
 
+#include "numpy/arrayobject.h"
+#include "ndarray/pybind11.h"
+
+
 #include "lsst/pex/config/python.h"
 #include "lsst/afw/table/io/python.h"
 #include "lsst/desc/old/bfd/BfdKMoment.h"
@@ -59,7 +63,13 @@ namespace bfd {
 
 PYBIND11_PLUGIN(bfdkmoment) {
 
-    py::module mod("bfdkmoment");
+     py::module mod("bfdkmoment");
+
+
+    if (_import_array() < 0) {
+        PyErr_SetString(PyExc_ImportError, "numpy.core.multiarray failed to import");
+        return nullptr;
+    }   
 
      py::class_<BfdKMoment, std::shared_ptr<BfdKMoment>, meas::base::SimpleAlgorithm> clsBfdKMoment(mod, "BfdKMoment");
      clsBfdKMoment.def(py::init<BfdKMomentControl const &, std::string const &,
@@ -124,7 +134,9 @@ PYBIND11_PLUGIN(bfdkmoment) {
     py::class_<MomentPrior, std::shared_ptr<MomentPrior>> clsMomentPrior(mod, "MomentPrior");
     clsMomentPrior.def(py::init<>());
     clsMomentPrior.def(py::init<double, double, ndarray::Array<float,2,2>, bool, double, double, double,
-                       int, double, bool>());
+                       int, double, bool>(),
+                       "fluxMin"_a, "fluxMax"_a, "covariance"_a, "invariantCovariance"_a, "noiseFactor"_a, 
+                       "sigmaCutoff"_a, "sigmaStep"_a, "nSamp"_a, "sigmaBuffer"_a, "selectionOnly"_a);
     clsMomentPrior.def("addPriorGalaxy", &MomentPrior::addPriorGalaxy, "gal"_a, "maxXY"_a, "weight"_a, "flip"_a, "id"_a);
     clsMomentPrior.def("getPqr", &MomentPrior::getPqr, "moment"_a);
     clsMomentPrior.def("getPqrCat", &MomentPrior::getPqrCat, "momentCat"_a, "resultCat"_a, "nthreads"_a, "chunk"_a);
@@ -176,7 +188,7 @@ PYBIND11_PLUGIN(bfdkmoment) {
     clsBfdPqrKey.def("get", &BfdPqrKey::get, "record"_a);
     clsBfdPqrKey.def("set", &BfdPqrKey::set, "record"_a, "value"_a);
 
-    return mod.ptr();
-}
+     return mod.ptr();
+ }
 
 }}}}

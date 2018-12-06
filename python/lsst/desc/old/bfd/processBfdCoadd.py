@@ -11,97 +11,119 @@ from lsst.pex.config import Config, Field, ConfigurableField, ListField
 from .measureCoadd import MeasureCoaddTask
 from .processBfdPatch import PatchRunner
 
+# class ProcessBfdCoaddConfig(Config):
+#     processPatch = ConfigurableField(target=ProcessBfdPatchTask, doc="Patch processing task")
+#     coaddName = Field(dtype=str, default="deep", doc="Name of coadd")
+
+
+# def unpickle(factory, args, kwargs):
+#     """Unpickle something by calling a factory"""
+#     return factory(*args, **kwargs)
+
+# class ProcessBfdCoaddTask(BatchParallelTask):
+#     """Process Patches in parallel
+#     """
+#     ConfigClass = ProcessBfdCoaddConfig
+#     _DefaultName = "processBfdCoadd"
+#     RunnerClass = BatchTaskRunner
+
+#     def __init__(self, butler=None, *args, **kwargs):
+#         """!
+#         Constructor
+#         """
+#         BatchParallelTask.__init__(self, *args, **kwargs)
+#         self.makeSubtask("processPatch")
+
+#     @classmethod
+#     def _makeArgumentParser(cls, *args, **kwargs):
+#         kwargs.pop("doBatch", False)
+#         parser = ArgumentParser(name="processBfdCoadd", *args, **kwargs)
+#         parser.add_id_argument("--id", "deepCoadd", help="data ID, e.g. --id tract=12345 patch=1,2",
+#                                 ContainerClass=CoaddDataIdContainer)
+#         return parser
+
+#     def run(self, patchRef):
+#         """Process a patch, with scatter-gather-scatter using MPI.
+#         """
+#         with self.logOperation("processing %s" % (patchRef.dataId,)):
+#             self.processPatch.run(patchRef)
+
+#     def _getConfigName(self):
+#         return None
+#     def _getEupsVersionsName(self):
+#         return None
+#     def _getMetadataName(self):
+#         return None
+
+from lsst.pipe.base import ArgumentParser, ButlerInitializedTaskRunner, ConfigDatasetType
+from lsst.pipe.tasks.processCcd import ProcessCcdTask
+from lsst.pex.config import Config, Field, ConfigurableField, ListField
+from lsst.ctrl.pool.parallel import BatchParallelTask, BatchTaskRunner
 
 
 class ProcessBfdCoaddConfig(Config):
-    measure = ConfigurableField(target=MeasureCoaddTask, doc="CCD processing task")
-    coaddName = Field(dtype=str, default="deep", doc="Name of coadd")
+    processCcd = ConfigurableField(
+        target=ProcessCcdTask, doc="CCD processing task")
+    ignoreCcdList = ListField(dtype=int, default=[],
+                              doc="List of CCDs to ignore when processing")
+    ccdKey = Field(dtype=str, default="ccd",
+                   doc="DataId key corresponding to a single sensor")
 
 
-class DriverTaskRunner(CoaddTaskRunner):
-
-    def __init__(self, TaskClass, parsedCmd, doReturnResults=False):
-        CoaddTaskRunner.__init__(self, TaskClass, parsedCmd, doReturnResults)
-
-    def makeTask(self, parsedCmd=None, args=None):
-        return self.TaskClass(config=self.config, log=self.log)
-
-    @staticmethod
-    def getTargetList(parsedCmd, **kwargs):
-        """!Get bare butler into Task
-        @param parsedCmd results of parsing command input
-        """
-        kwargs["butler"] = parsedCmd.butler
-        return [(parsedCmd.id.refList, kwargs), ]
+class SingleFrameTaskRunner(BatchTaskRunner, ButlerInitializedTaskRunner):
+    """Run batches, and initialize Task using a butler"""
+    pass
 
 
-def unpickle(factory, args, kwargs):
-    """Unpickle something by calling a factory"""
-    return factory(*args, **kwargs)
-
-class ProcessBfdCoaddTask(BatchPoolTask):
+class ProcessBfdCoaddTask(BatchParallelTask):
+    """Process CCDs in parallel
+    """
     ConfigClass = ProcessBfdCoaddConfig
     _DefaultName = "processBfdCoadd"
-    RunnerClass = DriverTaskRunner
+    RunnerClass = SingleFrameTaskRunner
 
-    def __init__(self, **kwargs):
-        BatchPoolTask.__init__(self, **kwargs)
+    def __init__(self, butler=None, psfRefObjLoader=None, astromRefObjLoader=None, photoRefObjLoader=None,
+                 *args, **kwargs):
+        """!
+        Constructor
+        The psfRefObjLoader, astromRefObjLoader, photoRefObjLoader should
+        be an instance of LoadReferenceObjectsTasks that supplies an external
+        reference catalog. They may be None if the butler argument is
+        provided or the particular reference catalog is not required.
+        @param[in] butler  The butler is passed to the refObjLoader constructor in case it is
+            needed.  Ignored if the refObjLoader argument provides a loader directly.
+        @param[in] psfRefObjLoader  Reference catalog loader for PSF determination.
+        @param[in] astromRefObjLoader  Reference catalog loader for astrometric calibration.
+        @param[in] photoRefObjLoader Reference catalog loader for photometric calibration.
+        @param[in,out] kwargs  other keyword arguments for lsst.ctrl.pool.BatchParallelTask
+        """
+        BatchParallelTask.__init__(self, *args, **kwargs)
+        self.ignoreCcds = set(self.config.ignoreCcdList)
+        self.makeSubtask("processCcd", butler=butler, psfRefObjLoader=psfRefObjLoader,
+                         astromRefObjLoader=astromRefObjLoader, photoRefObjLoader=photoRefObjLoader)
 
-        self.makeSubtask('measure')
-
-    def __reduce__(self):
-        """Pickler"""
-        return unpickle, (self.__class__, [], dict(config=self.config, name=self._name,
-                                                   parentTask=self._parentTask, log=self.log,
-                                                   ))
     @classmethod
     def _makeArgumentParser(cls, *args, **kwargs):
         kwargs.pop("doBatch", False)
-        parser = ArgumentParser(name=cls._DefaultName, *args, **kwargs)
-        parser.add_id_argument("--id", "deepCoadd", help="data ID, e.g. --id tract=12345 patch=1,2",
-                               ContainerClass=TractDataIdContainer)
+        parser = ArgumentParser(name="processBfdCoadd", *args, **kwargs)
+        parser.add_id_argument("--id",
+                               datasetType=ConfigDatasetType(
+                                   name="processCcd.isr.datasetType"),
+                               level="sensor",
+                               help="data ID, e.g. --id visit=12345 ccd=67")
         return parser
 
-    @classmethod
-    def batchWallTime(cls, time, parsedCmd, numCores):
-        return time
-#    def run(self, tractPatchRefList, bmeautler, selectIdList=[]):
-#        print "finished"
-#    def runDataRef(self, tractPatchRefList, butler, selectIdList=[]):
-#        """Determine which tracts are non-empty before processing"""
-#        self.log.info('enter run')
-#        pool = Pool("tracts")
-#
-#        return [self.runTract(patchRefList, butler) for patchRefList in tractPatchRefList]
-#
-    @abortOnError
-    def runDataRef(self, tractPatchRefList, butler):
-        """!Determine which tracts are non-empty before processing
-        @param tractPatchRefList: List of tracts and patches to include in the coaddition
-        @param butler: butler reference object
-        @param selectIdList: List of data Ids (i.e. visit, ccd) to consider when making the coadd
-        @return list of references to sel.runTract function evaluation for each tractPatchRefList member
+    def runDataRef(self, sensorRef):
+        """Process a single CCD, with scatter-gather-scatter using MPI.
         """
-        pool = Pool("tracts")
-        pool.storeSet(butler=butler, skymap=butler.get(self.config.coaddName + "Coadd_skyMap"))
+        if sensorRef.dataId[self.config.ccdKey] in self.ignoreCcds:
+            self.log.warn("Ignoring %s: CCD in ignoreCcdList" %
+                          (sensorRef.dataId))
+            return None
 
-        return [self.runTract(patchRefList, butler) for patchRefList in tractPatchRefList]
-
-    def runTract(self, patchRefList, butler):
-
-        pool = Pool("patches")
-        pool.map(self.runBfd, patchRefList)
-
-    def runBfd(self, cache, patchRef):
-
-        with self.logOperation("processing %s " % (patchRef.dataId)):
-            try:
-                result = self.measure.run(patchRef)
-            except Exception as e:
-                self.log.warn("Failed to process %s: %s\n" % (patchRef.dataId, e))
-                import traceback
-                traceback.print_exc()
-                return None
+        with self.logOperation("processing %s" % (sensorRef.dataId,)):
+            return self.processCcd.runDataRef(sensorRef)
+>>>>>>> Stashed changes
 
     def _getConfigName(self):
         return None
