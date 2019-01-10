@@ -51,7 +51,8 @@ public:
         afw::table::SourceRecord & source,
         afw::image::Exposure<float> const & exposure,
         afw::geom::Point2D const & center,
-        double noise, bool useSrcFootprint=true);
+        double noise, bool useSrcFootprint=true,
+        long id=-1);
 
     bool addScaledPSFImage(
         afw::table::SourceRecord & source,
@@ -386,7 +387,8 @@ private:
 
 struct BfdKMomentInfoResult { 
      enum FlagBit { 
-        FAILED=0, 
+        FAILED=0,
+        SHIFT_FAILED=1,
         N_FLAGS 
     }; 
 
@@ -397,7 +399,7 @@ struct BfdKMomentInfoResult {
 
     ndarray::Array<float,1,1> moments; 
     ndarray::Array<float,2,2> momentsDeriv; 
-    int id;// make this larger - correspond to detection id? 
+    long id;// make this larger - correspond to detection id? 
     float weight; 
     float selectionWeight; 
 

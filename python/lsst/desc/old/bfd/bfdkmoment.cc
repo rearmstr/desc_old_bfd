@@ -25,7 +25,7 @@
 
 #include "numpy/arrayobject.h"
 #include "ndarray/pybind11.h"
-
+#include "pybind11/stl.h"
 
 #include "lsst/pex/config/python.h"
 #include "lsst/afw/table/io/python.h"
@@ -63,8 +63,8 @@ namespace bfd {
 
 PYBIND11_PLUGIN(bfdkmoment) {
 
-     py::module mod("bfdkmoment");
-
+    py::module::import("lsst.afw.table");
+    py::module mod("bfdkmoment");
 
     if (_import_array() < 0) {
         PyErr_SetString(PyExc_ImportError, "numpy.core.multiarray failed to import");
@@ -175,7 +175,7 @@ PYBIND11_PLUGIN(bfdkmoment) {
 
     py::class_<PriorGalaxy, std::shared_ptr<PriorGalaxy>> clsPriorGalaxy(mod, "PriorGalaxy");
     clsPriorGalaxy.def(py::init<BfdKMomentControl const &>(), "ctr"_a);
-    clsPriorGalaxy.def("addImage",&PriorGalaxy::addImage, "source"_a, "exposure"_a, "center"_a, "noise"_a, "scale"_a);
+    clsPriorGalaxy.def("addImage",&PriorGalaxy::addImage, "source"_a, "exposure"_a, "center"_a, "noise"_a, "scale"_a, "id"_a);
     clsPriorGalaxy.def("addScaledPSFImage",&PriorGalaxy::addScaledPSFImage);
     clsPriorGalaxy.def("getMoments",&PriorGalaxy::getMoments);
     clsPriorGalaxy.def("getMomentCov",&PriorGalaxy::getMomentCov);

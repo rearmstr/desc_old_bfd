@@ -78,24 +78,26 @@ namespace lsst { namespace desc { namespace old { namespace bfd {
      bool reCentroidPsf=true,
      bool ignorePsf=false,
      int interpOrder=5,
+     int id=-1,
      //Table<> noisePs=Table<>(),
      vector<double> kval=vector<double>(),
      vector<double> val=vector<double>(),
      PTR(afw::image::Image<Pixel>) cov=PTR(afw::image::Image<Pixel>)()
      )
  {
-     LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.bfd");
+     LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.old.bfd");
 
      ImageConverter<Pixel> imageConvert(image);
      LOGL_DEBUG(trace3Logger, "image size %d %d",image->getBBox().getWidth(),image->getBBox().getHeight() );
      PTR(img::Image<Pixel>) im = imageConvert.getBFDImage();
      DVector2 origin(0.);
-     if (reCentroid)
-       {
-         double hlr;
-         double sigma = image->getWidth() / 12.;
-         BFD::centroid(*im, sigma, x0, y0, hlr);
-         LOGL_DEBUG(trace3Logger,"Calculated centroid %g %g, half light radius %g",x0,y0,hlr);
+     if (reCentroid) {
+       double hlr;
+       double sigma = image->getWidth() / 12.;
+       BFD::centroid(*im, sigma, x0, y0, hlr);
+       LOGL_DEBUG(trace3Logger,
+                  "Calculated centroid %g %g, half light radius %g", x0, y0,
+                  hlr);
      } else {
        LOGL_DEBUG(trace3Logger,"Using centroid %g %g",x0,y0);
      }
@@ -115,15 +117,21 @@ namespace lsst { namespace desc { namespace old { namespace bfd {
      fft::Lanczos interp1d(interpOrder,true);
      fft::InterpolantXY interp2d(interp1d);
      // Useful for debugging images
-     ////if (debugLog.getThreshold()<-5) {
-     ////        stringstream name;
-     ////        int id = (10000*myrand());
-     ////        name<<"test_image"<<id<<".fits"<<ends;
-     ////        image->writeFits(name.str());
-     ////        stringstream psf_name;
-     ////        psf_name<<"test_psf_image"<<id<<".fits"<<ends;
-     ////        psf->computeKernelImage(afw::geom::Point2D(x0,y0))->writeFits(psf_name.str());
-     ////}
+     //if (debugLog.getThreshold()<-5) {
+     if(false) {
+             stringstream name;
+             int uid;
+             if (id < 1) {
+                uid = (10000*myrand());
+            } else {
+                uid = id;
+            }
+             name<<"test_image"<<uid<<".fits"<<ends;
+             image->writeFits(name.str());
+             stringstream psf_name;
+             psf_name<<"test_psf_image"<<uid<<".fits"<<ends;
+             psf->computeKernelImage(afw::geom::Point2D(x0,y0))->writeFits(psf_name.str());
+     }
 
      PTR(BFD::Psf) sbPsf;
       if (ignorePsf) {
@@ -141,7 +149,7 @@ namespace lsst { namespace desc { namespace old { namespace bfd {
           sbPsf.reset(new BFD::SbPsf(pixPsf));
 
           if (reCentroidPsf) {
- 	   ///LOGL_DEBUG(trace3Logger,"Recentroiding PSF");
+           ///LOGL_DEBUG(trace3Logger,"Recentroiding PSF");
               double psfHlr, psfX0(0.), psfY0(0.);
               double psfSigma = psfImage->getWidth() / 12.;
               BFD::centroid(*psfIm, psfSigma, psfX0, psfY0, psfHlr);
@@ -209,9 +217,9 @@ namespace lsst { namespace desc { namespace old { namespace bfd {
      r._momentsPsfKey = schema.addField<afw::table::Array<float> >(name+"_moments_psf",
                                                                    "k-space moments of Psf", NMoment);
      r._centerKey = afw::table::PointKey<double>::addFields(schema, name+"_center",
- 							   "center where moments were evaluated", "pixel");
+                                                           "center where moments were evaluated", "pixel");
      r._shiftKey = afw::table::PointKey<double>::addFields(schema, name+"_shift",
- 							  "amount center was shifted", "pixel");
+                                                          "amount center was shifted", "pixel");
      r._flagsKey[0] = schema.addField<afw::table::Flag>(name+"_flags", "failure flag");
      r._flagsKey[1] = schema.addField<afw::table::Flag>(name+"_flags_shift_failed", "shift failed");
      r._flagsKey[2] = schema.addField<afw::table::Flag>(name+"_flags_shift_large", "shift too large");
@@ -238,19 +246,19 @@ namespace lsst { namespace desc { namespace old { namespace bfd {
  BfdKMomentResultKey::BfdKMomentResultKey(afw::table::Schema schema, std::string name) {
      _momentsKey = schema.find<afw::table::Array<float> >(name+"_moments").key;
      _momentsCovKey = schema.find<afw::table::Array<float> >(name+"_momentsCov").key;
-     _momentsPsfKey = schema.find<afw::table::Array<float> >(name+"_moments.psf").key;
+     _momentsPsfKey = schema.find<afw::table::Array<float> >(name+"_moments_psf").key;
      _centerKey = lsst::afw::table::PointKey<double>(schema[name+"_center"]);
      _shiftKey = lsst::afw::table::PointKey<double>(schema[name+"_shift"]);
      _flagsKey[0] = schema.find<afw::table::Flag>(name+"_flags").key;
      _flagsKey[1] = schema.find<afw::table::Flag>(name+"_flags_shift_failed").key;
      _flagsKey[2] = schema.find<afw::table::Flag>(name+"_flags_shift_large").key;
-     _flagsKey[3] = schema.find<afw::table::Flag>(name+"_flags_shift)centroid.large").key;
+     _flagsKey[3] = schema.find<afw::table::Flag>(name+"_flags.shift.centroid.large").key;
      _flagsKey[4] = schema.find<afw::table::Flag>(name+"_flags_too-big").key;
      _flagsKey[5] = schema.find<afw::table::Flag>(name+"_flags_variance").key;
      _flagsKey[6] = schema.find<afw::table::Flag>(name+"_flags_parent").key;
      _flagsKey[7] = schema.find<afw::table::Flag>(name+"_flags_flux_negative").key;
       _flagsKey[8] = schema.find<afw::table::Flag>(name+"_flags_size_negative").key;
-      _flagsKey[9] = schema.find<afw::table::Flag>(name+"_flags_saturated.center").key;
+      _flagsKey[9] = schema.find<afw::table::Flag>(name+"_flags_saturated_center").key;
      _flagsKey[10] = schema.find<afw::table::Flag>(name+"_flags_footprint-empty").key;
  }
 
@@ -315,8 +323,8 @@ namespace lsst { namespace desc { namespace old { namespace bfd {
  ) {
 
      BfdKMoment::Result result;
-     LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.bfd");
-     LOG_LOGGER trace4Logger = LOG_GET("TRACE4.desc.bfd");
+     LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.old.bfd");
+     LOG_LOGGER trace4Logger = LOG_GET("TRACE4.desc.old.bfd");
 
      double scaling = std::sqrt(std::abs(transform.computeDeterminant()));
      PTR(BFD::KWeight) kw;
@@ -482,7 +490,7 @@ namespace lsst { namespace desc { namespace old { namespace bfd {
 
 
  void BfdKMoment::measure(
- 	afw::table::SourceRecord & measRecord,
+        afw::table::SourceRecord & measRecord,
          afw::image::Exposure<Pixel> const & exposure) const
  {
 
@@ -511,8 +519,8 @@ namespace lsst { namespace desc { namespace old { namespace bfd {
  ) const {
 
      Control const& control = static_cast <Control const&> ( _ctrl);
-     LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.bfd");
-     LOG_LOGGER trace4Logger = LOG_GET("TRACE4.desc.bfd");
+     LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.old.bfd");
+     LOG_LOGGER trace4Logger = LOG_GET("TRACE4.desc.old.bfd");
 
      double variance = 1;
      std::vector<double> kData, psData;
@@ -595,14 +603,14 @@ namespace lsst { namespace desc { namespace old { namespace bfd {
              psData = metadata->getArray<double>("psData");
              pg = getPixelGalaxy(*kw, image, psf, transform, center, variance, x0, y0,
                                  control.reCentroid, control.reCentroidPsf, control.ignorePsf,
-                                 control.interpOrder, kData, psData);
+                                 control.interpOrder, source.getId(), kData, psData);
          } else if (control.useNoiseImagePs) {
              PTR(afw::image::Image<Pixel>) cov(new afw::image::Image<Pixel>(control.noiseImage));
              Table<> noisePs();
              std::vector<double> vec;
              PTR(BFD::PixelGalaxy<UseMoments>) pg = getPixelGalaxy(*kw, image, psf, transform, center, variance, x0, y0,
                                                                    control.reCentroid, control.reCentroidPsf, control.ignorePsf,
-                                                                   control.interpOrder, vec, vec, cov);
+                                                                   control.interpOrder, source.getId(), vec, vec, cov);
          } else {
              pg = getPixelGalaxy(*kw, image, psf, transform, center, variance, x0, y0,
                                  control.reCentroid, control.reCentroidPsf, control.ignorePsf, control.interpOrder);
@@ -751,15 +759,15 @@ public:
              CONST_PTR(afw::detection::Psf) const & psf,
              afw::geom::LinearTransform const & transform,
              afw::geom::Point2D const & center,
-             double noise) {
-        LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.bfd");
+             double noise, long id) {
+        LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.old.bfd");
         //PTR(BFD::PixelGalaxy<UseMoments>) pg;
         try {
             double x0=center.getX();
             double y0=center.getY();
             LOGL_DEBUG(trace3Logger,"getting pixel galaxy for prior");
             pg = getPixelGalaxy(*kw, image, psf, transform, center, noise, x0, y0,
-                                _ctrl.reCentroid, _ctrl.reCentroidPsf, _ctrl.ignorePsf, _ctrl.interpOrder);
+                                _ctrl.reCentroid, _ctrl.reCentroidPsf, _ctrl.ignorePsf, _ctrl.interpOrder, id);
             return true;
         } catch(const std::exception& ex) {
 
@@ -786,9 +794,9 @@ bool PriorGalaxy::addImage(
     afw::table::SourceRecord & source,
     afw::image::Exposure<float> const & exposure,
     afw::geom::Point2D const & center,
-    double noise, bool useSrcFootprint)
+    double noise, bool useSrcFootprint, long id)
 {
-    LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.bfd");
+    LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.old.bfd");
     PTR(afw::detection::Psf const) psf = exposure.getPsf();
     PTR(afw::image::Image<Pixel>) imageExp = exposure.getMaskedImage().getImage();
     //PTR(afw::image::Wcs) wcs = exposure.getWcs();
@@ -800,9 +808,9 @@ bool PriorGalaxy::addImage(
         afw::geom::Box2I box = foot->getBBox();
         PTR(afw::image::Image<Pixel>) image = std::make_shared<afw::image::Image<Pixel> >(*imageExp, box,
                                                                                             afw::image::PARENT);
-        return _impl->addImage(image, psf, transform, center, noise);
+        return _impl->addImage(image, psf, transform, center, noise, id);
     }
-    return _impl->addImage(imageExp, psf, transform, center, noise);
+    return _impl->addImage(imageExp, psf, transform, center, noise, id);
 
 }
 
@@ -812,7 +820,7 @@ bool PriorGalaxy::addScaledPSFImage(
     afw::geom::Point2D const & center,
     double noise, float scale)
 {
-    LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.bfd");
+    LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.old.bfd");
     LOGL_DEBUG(trace3Logger,"entering addScaledPSFImage");
     PTR(afw::detection::Psf const) psf = exposure.getPsf();
     LOGL_DEBUG(trace3Logger,"creating psf image");
@@ -821,7 +829,7 @@ bool PriorGalaxy::addScaledPSFImage(
     *psfImage *= scale;
     LOGL_DEBUG(trace3Logger,"scaling by %f",scale);
     afw::geom::LinearTransform transform;
-    return _impl->addImage(psfImage, psf, transform, center, noise);
+    return _impl->addImage(psfImage, psf, transform, center, noise, -1);
 
 }
 
@@ -907,7 +915,7 @@ MomentPrior::MomentPrior(double fluxMin, double fluxMax,
 void MomentPrior::addPriorGalaxy(
     PriorGalaxy const & gal, double maxXY, double weight, bool flip, long id)
 {
-    LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.bfd");
+    LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.old.bfd");
     try {
         LOGL_DEBUG(trace3Logger,"adding template");
 
@@ -974,7 +982,7 @@ MomentPrior::getPqrCat(
     int chunk
     ) const
 {
-    LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.bfd");
+    LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.old.bfd");
 #ifdef _OPENMP
     if (nthreads > 0) {
         omp_set_num_threads(nthreads);
@@ -983,7 +991,7 @@ MomentPrior::getPqrCat(
 
     BfdKMomentResultKey momentKey(momentCat.getSchema(),"bfd");
     BfdPqrKey pqrKey(resultCat.getSchema(),"bfd");
-    afw::table::Key<afw::table::Flag> flagKey = resultCat.getSchema().find<afw::table::Flag>("bfd.flags").key;
+    afw::table::Key<afw::table::Flag> flagKey = resultCat.getSchema().find<afw::table::Flag>("bfd_flags").key;
 
  #ifdef _OPENMP
  #pragma omp parallel
@@ -1067,7 +1075,7 @@ MomentPrior::writeFits(std::string name) {
 afw::table::SourceCatalog
 MomentPrior::getCatalog() {
 
-    LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.bfd");
+    LOG_LOGGER trace3Logger = LOG_GET("TRACE3.desc.old.bfd");
     afw::table::Schema schema = afw::table::SourceTable::makeMinimalSchema();
     BfdKMomentInfoResultKey key = BfdKMomentInfoResultKey::addFields(schema, "bfd");
     afw::table::SourceCatalog catalog(schema);
@@ -1300,17 +1308,21 @@ BfdKMomentInfoResultKey BfdKMomentInfoResultKey::addFields(
     std::string const & name
     )
 {
-    BfdKMomentInfoResultKey r;
-    r._momentsKey = schema.addField<afw::table::Array<float> >(name+"_moments",
-                                                                    "k-space moments", NMoment);
-    r._momentsDerivKey = schema.addField<afw::table::Array<float> >(name+"_momentsDeriv",
-                                                                    "k-space moments and derivatices", NMoment*Npqr);
-    r._weightKey = schema.addField<float>(name+"_weight","weight");
-    r._selectionWeightKey = schema.addField<float>(name+"_selectionWeight","selection weight");
-    r._idKey = schema.addField<int>(name+"_id","id");
-    r._flagsKey[0] = schema.addField<afw::table::Flag>(name+"_flags", "failure flag");
-    r._flagsKey[1] = schema.addField<afw::table::Flag>(name+"_flags_shift", "shift was too large");
-    return r;
+  BfdKMomentInfoResultKey r;
+  r._momentsKey = schema.addField<afw::table::Array<float> >(
+      name + "_moments", "k-space moments", NMoment);
+  r._momentsDerivKey = schema.addField<afw::table::Array<float> >(
+      name + "_momentsDeriv", "k-space moments and derivatices",
+      NMoment * Npqr);
+  r._weightKey = schema.addField<float>(name + "_weight", "weight");
+  r._selectionWeightKey =
+      schema.addField<float>(name + "_selectionWeight", "selection weight");
+  r._idKey = schema.addField<int>(name + "_id", "id");
+  r._flagsKey[0] =
+      schema.addField<afw::table::Flag>(name + "_flags", "failure flag");
+  r._flagsKey[1] = schema.addField<afw::table::Flag>(name + "_flags_shift",
+                                                     "shift was too large");
+  return r;
 
 }
 

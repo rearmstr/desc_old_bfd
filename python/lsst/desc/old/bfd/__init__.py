@@ -20,7 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 from lsst.meas.base import BasePlugin, wrapSimpleAlgorithm
 
-from .moment import *
+#from .moment import *
 #from .test import *
 from .bfdkmoment import *
 #from .baseMeasure import *

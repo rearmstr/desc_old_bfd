@@ -1,4 +1,4 @@
 #!/usr/bin/env python
-from lsst.desc.old.bfd.processBfdPatch import ProcessBfdPatchTask
+from lsst.desc.bfd.processBfdPatch import ProcessBfdPatchTask
 ProcessBfdPatchTask.parseAndRun()
 
