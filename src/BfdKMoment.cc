@@ -224,7 +224,7 @@ namespace lsst { namespace desc { namespace old { namespace bfd {
      r._flagsKey[1] = schema.addField<afw::table::Flag>(name+"_flags_shift_failed", "shift failed");
      r._flagsKey[2] = schema.addField<afw::table::Flag>(name+"_flags_shift_large", "shift too large");
      r._flagsKey[3] = schema.addField<afw::table::Flag>(
-         name + "_flags.shift.centroid.large",
+         name + "_flags_shift_centroid_large",
          "centroid of shifted moments too large");
      r._flagsKey[4] = schema.addField<afw::table::Flag>(name+"_flags_too-big", "pixel region too big");
      r._flagsKey[5] = schema.addField<afw::table::Flag>(name+"_flags_variance",
@@ -252,7 +252,7 @@ namespace lsst { namespace desc { namespace old { namespace bfd {
      _flagsKey[0] = schema.find<afw::table::Flag>(name+"_flags").key;
      _flagsKey[1] = schema.find<afw::table::Flag>(name+"_flags_shift_failed").key;
      _flagsKey[2] = schema.find<afw::table::Flag>(name+"_flags_shift_large").key;
-     _flagsKey[3] = schema.find<afw::table::Flag>(name+"_flags.shift.centroid.large").key;
+     _flagsKey[3] = schema.find<afw::table::Flag>(name+"_flags_shift_centroid_large").key;
      _flagsKey[4] = schema.find<afw::table::Flag>(name+"_flags_too-big").key;
      _flagsKey[5] = schema.find<afw::table::Flag>(name+"_flags_variance").key;
      _flagsKey[6] = schema.find<afw::table::Flag>(name+"_flags_parent").key;

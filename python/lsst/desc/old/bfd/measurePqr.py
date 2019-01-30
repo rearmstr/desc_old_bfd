@@ -29,10 +29,11 @@ import lsst.afw.table
 import numpy
 from .measureCoadd import MeasureCoaddTask, MeasureCoaddConfig
 from lsst.daf.persistence import Butler
-import lsst.desc.bfd as bfd
+import lsst.desc.old.bfd as bfd
 import glob
 
 __all__ = ("MeasurePqrConfig", "MeasurePqrTask")
+
 
 class MeasurePqrConfig(MeasureCoaddConfig):
 
@@ -113,19 +114,21 @@ class MeasurePqrConfig(MeasureCoaddConfig):
 class MeasurePqrTask(MeasureCoaddTask):
     ConfigClass = MeasurePqrConfig
 
-    def __init__(self,  schema=None, **kwargs):
+    def __init__(self, schema=None, **kwargs):
         """
         """
         MeasureCoaddTask.__init__(self, **kwargs)
 
-        self.schema =  lsst.afw.table.SourceTable.makeMinimalSchema()
+        self.schema = lsst.afw.table.SourceTable.makeMinimalSchema()
         # Should move these into C++?
-        self.flagMomKey = self.schema.addField("bfd.flags.moment", doc="flag bad input on moments", type='Flag')
-        self.notSelFluxKey = self.schema.addField("bfd.ns.flux", doc="not selected because of flux", type='Flag')
-        self.notSelVarKey = self.schema.addField("bfd.ns.var", doc="not selected because of variance", type='Flag')
+        self.flagMomKey = self.schema.addField("bfd_flags_moment", doc="flag bad input on moments",
+                                               type='Flag')
+        self.notSelFluxKey = self.schema.addField("bfd_ns_flux", doc="not selected because of flux",
+                                                  type='Flag')
+        self.notSelVarKey = self.schema.addField("bfd_ns_var", doc="not selected because of variance",
+                                                 type='Flag')
         self.pqrKey = bfd.BfdPqrKey.addFields(self.schema, "bfd")
-        self.flagKey = self.schema.find('bfd.flags').key
-
+        self.flagKey = self.schema.find('bfd_flags').key
 
     def readInputs(self, dataRef):
         """Return a lsst.pipe.base.Struct containing the Exposure to fit, catalog, measurement
@@ -135,23 +138,23 @@ class MeasurePqrTask(MeasureCoaddTask):
         return lsst.pipe.base.Struct(
             sources=dataRef.get(self.dataPrefix + "moment", immediate=True,
                                 flags=lsst.afw.table.SOURCE_IO_NO_FOOTPRINTS),
-            )
+        )
 
     def prepCatalog(self, inputs):
         """Prepare the prior and return the output catalog
         """
-        outCat =  lsst.afw.table.SourceCatalog(self.schema)
+        outCat = lsst.afw.table.SourceCatalog(self.schema)
         srcCat = inputs.sources
 
         for srcRecord in srcCat:
             outRecord = outCat.addNew()
-            #outRecord.setId(srcCat.get('id'))
+            # outRecord.setId(srcCat.get('id'))
 
         return outCat
 
     def prep(self):
         self.prior = bfd.MomentPrior()
-        priorFiles=[]
+        priorFiles = []
         priorButler = Butler(self.config.priorRerun)
         prior_skyMap = priorButler.get('deepCoadd_skyMap')
 
@@ -166,9 +169,9 @@ class MeasurePqrTask(MeasureCoaddTask):
                 if priorButler.datasetExists('deepCoadd_momentPrior', tract=tract, patch=patch,
                                              filter=self.config.priorFilter, label=self.config.priorLabel):
                     priorFiles.append(priorButler.get('deepCoadd_momentPrior_filename',
-                                                       tract=tract, patch=patch,
-                                                       filter=self.config.priorFilter,
-                                                       label=self.config.priorLabel)[0])
+                                                      tract=tract, patch=patch,
+                                                      filter=self.config.priorFilter,
+                                                      label=self.config.priorLabel)[0])
 
         max_file = len(priorFiles)
         if self.config.maxPriorFiles > 0:
@@ -186,10 +189,10 @@ class MeasurePqrTask(MeasureCoaddTask):
                                       self.config.sampleFraction, self.config.sampleSeed)
                 # Should be same for all prior catalogs
                 if first:
-                    self.cov = numpy.array(cat.getTable().getMetadata().getArrayDouble('COV')).reshape(6,6)
-                    first=False
-            except  Exception as e:
-                print ('Failed to read',e)
+                    self.cov = numpy.array(cat.getTable().getMetadata().getArrayDouble('COV')).reshape(6, 6)
+                    first = False
+            except Exception as e:
+                print('Failed to read', e)
                 continue
 
         self.prior.prepare()
@@ -200,14 +203,14 @@ class MeasurePqrTask(MeasureCoaddTask):
         selectionPqr = self.prior.selectionProbability(self.cov.astype(numpy.float32))
         deselect = selectionPqr.copy()
         deselect[0] = 1 - selectionPqr[0]
-        for i in range(1,6):
+        for i in range(1, 6):
             deselect[i] *= -1.
         self.noSelectPqr = deselect
 
     def run(self, dataRef):
         """Main driver
         """
-        self.log.info("Processing %s"% str(dataRef.dataId))
+        self.log.info("Processing %s" % str(dataRef.dataId))
 
         if self.config.checkExists:
             dataRef.dataId['label'] = self.config.priorLabel
@@ -216,17 +219,17 @@ class MeasurePqrTask(MeasureCoaddTask):
                     self.log.info('Pqr already exists %s. skipping' % dataRef.dataId)
                     return
                 filename = dataRef.get(self.dataPrefix+"pqr_filename")[0]
-                if filename.find('_parent') < 0 :
+                if filename.find('_parent') < 0:
                     self.log.info("Skipping %s, file %s exists" % (str(dataRef.dataId), filename))
                     return
 
         inputs = self.readInputs(dataRef)
         if self.config.maxObjects is not None:
             first = self.config.firstObject
-            last = min(self.config.firstObject + self.config.maxObjects,len(inputs.sources))
+            last = min(self.config.firstObject + self.config.maxObjects, len(inputs.sources))
             inputs.sources = inputs.sources[first:last]
         outCat = self.prepCatalog(inputs)
-        print ('Number of sources',len(outCat))
+        print('Number of sources', len(outCat))
         self.runMeasure(inputs.sources, outCat, dataRef)
 
         self.writeOutputs(dataRef, outCat)
@@ -237,70 +240,76 @@ class MeasurePqrTask(MeasureCoaddTask):
 
     def runMeasure(self, sources, outCat, dataRef):
 
-        flags = sources.get('bfd.flags')
-        flux = sources.get('bfd.moments')[:,0]
-        noise = sources.get('bfd.momentsCov')[:,0]
-        pqrKey = self.schema.find('bfd.pqr').key
+        flags = sources.get('bfd_flags')
+        flux = sources.get('bfd_moments')[:, 0]
+        noise = sources.get('bfd_momentsCov')[:, 0]
+        pqrKey = self.schema.find('bfd_pqr').key
 
         # Preslection cuts
         fail_pre_sel = flags == True
-        [rec.set(self.flagMomKey,True) for rec in outCat[fail_pre_sel]]
-        [rec.set(self.flagKey,True) for rec in outCat[fail_pre_sel]]
+        [rec.set(self.flagMomKey, True) for rec in outCat[fail_pre_sel]]
+        [rec.set(self.flagKey, True) for rec in outCat[fail_pre_sel]]
 
         pre_sel = numpy.logical_not(fail_pre_sel)
-        pre_frac =  1-1.*numpy.sum(fail_pre_sel)/len(sources)
-        self.log.info('Fraction passing preselection %g (%d)' % (pre_frac, numpy.sum(numpy.logical_not(fail_pre_sel))))
+        pre_frac = 1 - 1.*numpy.sum(fail_pre_sel)/len(sources)
+        self.log.info('Fraction passing preselection %g (%d)' %
+                      (pre_frac, numpy.sum(numpy.logical_not(fail_pre_sel))))
 
         # Variance selection
         fail_var = numpy.logical_and.reduce((pre_sel,
                                              numpy.logical_or(noise < self.varMin, noise > self.varMax)
                                              ))
-        if numpy.sum(pre_sel) >0:
-            var_frac =  1-1.*numpy.sum(fail_var)/numpy.sum(pre_sel)
+        if numpy.sum(pre_sel) > 0:
+            var_frac = 1-1.*numpy.sum(fail_var)/numpy.sum(pre_sel)
         else:
             var_frac = 0.
-        self.log.info('Remaining fraction passing after variance cuts %g (%d)' % (var_frac, numpy.sum(numpy.logical_not(fail_var))))
+        self.log.info('Remaining fraction passing after variance cuts %g (%d)' %
+                      (var_frac, numpy.sum(numpy.logical_not(fail_var))))
         [rec.set(self.notSelVarKey, True) for rec in outCat[fail_var]]
         [rec.set(self.flagKey, True) for rec in outCat[fail_var]]
 
         # Flux selection
-        flux_sel = numpy.logical_and.reduce((pre_sel,
-                                             noise > self.varMin,
-                                             noise < self.varMax,
-                                             flux > self.fluxMin,
-                                             flux < self.fluxMax
-        ))
-        print (self.varMin,self.varMax,self.fluxMin,self.fluxMax)
-        not_flux_sel = numpy.logical_and.reduce((pre_sel,
-                                                 noise > self.varMin,
-                                                 noise < self.varMax,
-                                                 numpy.logical_or(flux < self.fluxMin, flux > self.fluxMax)
-        ))
+        flux_sel = numpy.logical_and.reduce(
+            (pre_sel,
+             noise > self.varMin,
+             noise < self.varMax,
+             flux > self.fluxMin,
+             flux < self.fluxMax
+             )
+        )
+        print(self.varMin, self.varMax, self.fluxMin, self.fluxMax)
+        not_flux_sel = numpy.logical_and.reduce(
+            (pre_sel,
+             noise > self.varMin,
+             noise < self.varMax,
+             numpy.logical_or(flux < self.fluxMin, flux > self.fluxMax)
+             )
+        )
 
         total = numpy.sum(flux_sel) + numpy.sum(not_flux_sel)
 
         if total == 0:
             sel_frac = 0
         else:
-            sel_frac =  1.*numpy.sum(flux_sel)/(numpy.sum(flux_sel) + numpy.sum(not_flux_sel))
+            sel_frac = 1.*numpy.sum(flux_sel)/(numpy.sum(flux_sel) + numpy.sum(not_flux_sel))
 
         [rec.set(pqrKey, numpy.array(self.noSelectPqr).astype(numpy.float32)) for rec in outCat[not_flux_sel]]
 
         # pqr will be set from no selection term
         [rec.set(self.notSelFluxKey, True) for rec in outCat[not_flux_sel]]
         [rec.set(self.flagKey, False) for rec in outCat[not_flux_sel]]
-        self.log.info('Remaining fraction passing flux selection %g (%d) / %g (total)' % (sel_frac,numpy.sum(flux_sel),numpy.sum(flux_sel)/(1.*len(sources))))
-
+        self.log.info('Remaining fraction passing flux selection %g (%d) / %g (total)' %
+                      (sel_frac, numpy.sum(flux_sel), numpy.sum(flux_sel)/(1.*len(sources))))
 
         self.log.info("Surviving cuts:")
         self.log.info("   presel: %d" % numpy.sum(pre_sel))
-        self.log.info("   noise: %d" % numpy.sum((noise > self.varMin)&(noise < self.varMax)))
-        self.log.info("   flux: %d" % numpy.sum((flux > self.fluxMin)&(flux < self.fluxMax)))
+        self.log.info("   noise: %d" % numpy.sum((noise > self.varMin) & (noise < self.varMax)))
+        self.log.info("   flux: %d" % numpy.sum((flux > self.fluxMin) & (flux < self.fluxMax)))
         self.log.info("  total:%d" % numpy.sum(flux_sel))
 
         # Set flag key to false initially, a failure will be set in c++
         [rec.set(self.flagKey, False) for rec in outCat[flux_sel]]
-        self.prior.getPqrCat(sources[flux_sel], outCat[flux_sel], self.config.numProc,  100)
+        self.prior.getPqrCat(sources[flux_sel], outCat[flux_sel], self.config.numProc, 100)
 
 
             # Cut for failed moments or size too small
@@ -329,8 +338,6 @@ class MeasurePqrTask(MeasureCoaddTask):
             #print pqr.pqr
             #self.pqrKey.set(source,pqr)
 
-
-
     def writeOutputs(self, dataRef, outCat):
         """Write task outputs using the butler.
         """
@@ -340,15 +347,15 @@ class MeasurePqrTask(MeasureCoaddTask):
 
     def selection(self, source, ref):
         # Don't process blended parent objects
-        if ref.getParent()==0 and ref.get('deblend_nChild')>0:
+        if ref.getParent() == 0 and ref.get('deblend_nChild') > 0:
             return False
         # For now don't process objects in a blend
-        #if ref.getParent()!=0:
-        #    return False
+        # if ref.getParent()!=0:
+        #     return False
         if ref.getFootprint().getArea() > self.config.maxArea:
             return False
         if ref.getFootprint().getArea() == 0:
             return False
-        #if ref.get('classification.extendedness') == 0:
-        #    return False
+        # if ref.get('classification.extendedness') == 0:
+        #     return False
         return True

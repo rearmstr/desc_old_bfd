@@ -567,7 +567,7 @@ class MeasurePriorTask(MeasureCoaddTask):
                 maxFlux = self.config.fluxMax
             elif self.config.magMax is not None:
                 maxFlux = 10**(-0.4*(self.config.magMax-27))
-
+            self.log.info('Min/Max %0.2f/%0.2f', minFlux, maxFlux)
             momentPrior = bfd.MomentPrior(minFlux, maxFlux,
                                           cov, self.config.invariantCovariance,
                                           self.config.noiseFactor,

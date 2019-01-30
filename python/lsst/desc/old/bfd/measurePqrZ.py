@@ -26,37 +26,39 @@ import lsst.pipe.base
 import lsst.afw.image
 import lsst.afw.geom
 import lsst.afw.table
-import lsst.meas.extensions.bfd
-import numpy
+import numpy as np
 from .measureCoadd import MeasureCoaddTask, MeasureCoaddConfig
 from lsst.daf.persistence import Butler
-import lsst.meas.extensions.bfd as bfd
-import glob
-import pyfits
+import lsst.desc.old.bfd as bfd
+import astropy.io.fits as pyfits
 import scipy.spatial
 
 
-__all__ = ("MeasurePqrConfig", "MeasurePqrTask")
+__all__ = ("MeasurePqrZConfig", "MeasurePqrZTask")
+
 
 def matchTreeCatalogs(tree_ref, ra_p, dec_p, dmin):
-    ra_p = ra_p*numpy.pi/180
-    dec_p = dec_p*numpy.pi/180
-    posP = numpy.dstack([numpy.sin(dec_p  )*numpy.cos(ra_p  ), numpy.sin(dec_p  )*numpy.sin(ra_p), numpy.sin(dec_p  )])[0]
+    ra_p = ra_p*np.pi/180
+    dec_p = dec_p*np.pi/180
+    posP = np.dstack([np.sin(dec_p)*np.cos(ra_p), np.sin(dec_p)*np.sin(ra_p), np.sin(dec_p)])[0]
     dist, index = tree_ref.query(posP)
 
     # convert to arsec
-    dist*=3600.*(180/numpy.pi)
+    dist *= 3600.*(180/np.pi)
 
     close = dist < dmin
-    closeIndices=index[close]
-    return close,closeIndices,dist[close]
+    closeIndices = index[close]
+    return close, closeIndices, dist[close]
+
+
 def matchXYTreeCatalogs(tree_ref, x, y, dmin):
-    posP = numpy.dstack([x,y])[0]
+    posP = np.dstack([x, y])[0]
     dist, index = tree_ref.query(posP)
 
     close = dist < dmin
-    closeIndices=index[close]
-    return close,closeIndices,dist[close]
+    closeIndices = index[close]
+    return close, closeIndices, dist[close]
+
 
 class MeasurePqrZConfig(MeasureCoaddConfig):
 
@@ -75,9 +77,9 @@ class MeasurePqrZConfig(MeasureCoaddConfig):
     )
     chunk = lsst.pex.config.Field(
         dtype=int,
-        default=100,
+        default=300,
         optional=True,
-        doc="number of chunks"
+        doc="number of processors to use"
     )
     sampleSeed = lsst.pex.config.Field(
         dtype=int,
@@ -122,7 +124,7 @@ class MeasurePqrZConfig(MeasureCoaddConfig):
     )
     priorPatches = lsst.pex.config.ListField(
         dtype=str,
-        default=[],
+        default=None,
         optional=True,
         doc="Dictionary for the fraction of the galaxies used for eac"
     )
@@ -131,6 +133,12 @@ class MeasurePqrZConfig(MeasureCoaddConfig):
         default=False,
         optional=True,
         doc="Dictionary for the fraction of the galaxies used for eac"
+    )
+    noClobber = lsst.pex.config.Field(
+        dtype=bool,
+        optional=False,
+        default=False,
+        doc="check if already exists"
     )
     zFile = lsst.pex.config.Field(
         dtype=str,
@@ -158,7 +166,7 @@ class MeasurePqrZConfig(MeasureCoaddConfig):
     )
     zBins = lsst.pex.config.ListField(
         dtype=float,
-        default= [0, 0.55, 0.8, 1.1, 1.6, 3],
+        default=[0, 0.55, 0.8, 1.1, 1.6, 3],
         optional=True,
         doc="Dictionary for the fraction of the galaxies used for eac"
     )
@@ -179,18 +187,6 @@ class MeasurePqrZConfig(MeasureCoaddConfig):
         optional=False,
         default=False,
         doc="Randomize redshift assignement"
-    )
-    readZFile = lsst.pex.config.Field(
-        dtype=bool,
-        optional=False,
-        default=False,
-        doc="read truth z file from butler"
-    )
-    zField = lsst.pex.config.Field(
-        dtype=str,
-        optional=False,
-        default='frankenz_photoz_mode',
-        doc="file for redshift information"
     )
     zRa = lsst.pex.config.Field(
         dtype=str,
@@ -228,47 +224,29 @@ class MeasurePqrZConfig(MeasureCoaddConfig):
         optional=True,
         doc="write empty catalogs"
     )
-    addTruth = lsst.pex.config.Field(
-        dtype=bool,
-        default=False,
-        optional=True,
-        doc="add true shear values"
-    )
-
-    writeNonSelect = lsst.pex.config.Field(
-        dtype=bool,
-        default=False,
-        optional=True,
-        doc="write out galaxies that were not selected by the flux cut with 1-P(s)"
-    )
-
 
 
 class MeasurePqrZTask(MeasureCoaddTask):
     ConfigClass = MeasurePqrZConfig
 
-    def __init__(self,  schema=None, **kwargs):
+    def __init__(self, schema=None, **kwargs):
         """
         """
         MeasureCoaddTask.__init__(self, **kwargs)
 
-        self.schema =  lsst.afw.table.SourceTable.makeMinimalSchema()
+        self.schema = lsst.afw.table.SourceTable.makeMinimalSchema()
         # Should move these into C++?
-        self.noiseBinKey = self.schema.addField("bfd.noise.bin", doc="Noise bin", type=int)
-        self.fluxBinKey = self.schema.addField("bfd.flux.bin", doc="Flux bin", type=int)
-        self.zBinKey = self.schema.addField("bfd.redshift.bin", doc="Redshift", type=int)
-        self.disZKey = self.schema.addField("bfd.redshift.distance", doc="distance to redshift", type=float)
-        self.zKey = self.schema.addField("bfd.redshift", doc="redshift used in pqr", type=float)
+        self.flagMomKey = self.schema.addField("bfd_flags_moment", doc="flag bad input on moments",
+                                               type='Flag')
+        self.notSelFluxKey = self.schema.addField("bfd_ns_flux", doc="not selected because of flux",
+                                                  type='Flag')
+        self.notSelVarKey = self.schema.addField("bfd_ns_var", doc="not selected because of variance",
+                                                 type='Flag')
         self.pqrKey = bfd.BfdPqrKey.addFields(self.schema, "bfd")
-        self.flagKey = self.schema.find('bfd.flags').key
-        if self.config.addTruth:
-            self.g1Key = self.schema.addField("truth.g1", doc="true g1", type=float)
-            self.g2Key = self.schema.addField("truth.g2", doc="true g2", type=float)
-            self.xKey = self.schema.addField("x", doc="bfd x", type=float)
-            self.yKey = self.schema.addField("y", doc="bfd y", type=float)
-        if self.config.writeNonSelect:
-            self.flagNSKey = self.schema.addField("bfd.flag.ns", doc="Failed flux selection", type="Flag")
-
+        self.flagKey = self.schema.find('bfd_flags').key
+        self.zBinKey = self.schema.addField("bfd_redshift_bin", doc="Redshift", type=np.int32)
+        self.disZKey = self.schema.addField("bfd_redshift_distance", doc="distance to redshift", type=float)
+        self.zKey = self.schema.addField("bfd_redshift", doc="redshift used in pqr", type=float)
 
     def readInputs(self, dataRef):
         """Return a lsst.pipe.base.Struct containing the Exposure to fit, catalog, measurement
@@ -277,24 +255,24 @@ class MeasurePqrZTask(MeasureCoaddTask):
 
         return lsst.pipe.base.Struct(
             sources=dataRef.get(self.dataPrefix + "moment", immediate=True,
-                                    flags=lsst.afw.table.SOURCE_IO_NO_FOOTPRINTS),
+                                flags=lsst.afw.table.SOURCE_IO_NO_FOOTPRINTS),
         )
 
     def prepCatalog(self, inputs):
         """Prepare the prior and return the output catalog
         """
-        outCat =  lsst.afw.table.SourceCatalog(self.schema)
+        outCat = lsst.afw.table.SourceCatalog(self.schema)
         srcCat = inputs.sources
 
         for srcRecord in srcCat:
             outRecord = outCat.addNew()
-            #outRecord.setId(srcCat.get('id'))
+            # outRecord.setId(srcCat.get('id'))
 
         return outCat
 
     def prep(self):
         self.prior = bfd.MomentPrior()
-        priorFiles=[]
+        priorFiles = []
         priorButler = Butler(self.config.priorRerun)
         prior_skyMap = priorButler.get('deepCoadd_skyMap')
 
@@ -309,11 +287,10 @@ class MeasurePqrZTask(MeasureCoaddTask):
                 if priorButler.datasetExists('deepCoadd_momentPrior', tract=tract, patch=patch,
                                              filter=self.config.priorFilter, label=self.config.priorLabel):
                     priorFiles.append(priorButler.get('deepCoadd_momentPrior_filename',
-                                                       tract=tract, patch=patch,
-                                                       filter=self.config.priorFilter,
-                                                       label=self.config.priorLabel)[0])
-        if len(priorFiles)==0:
-            raise Exception('No Prior files found')
+                                                      tract=tract, patch=patch,
+                                                      filter=self.config.priorFilter,
+                                                      label=self.config.priorLabel)[0])
+
         max_file = len(priorFiles)
         if self.config.maxPriorFiles > 0:
             max_file = self.config.maxPriorFiles
@@ -327,142 +304,83 @@ class MeasurePqrZTask(MeasureCoaddTask):
             self.log.info("Adding prior %s" % file)
             try:
                 cat = lsst.afw.table.BaseCatalog.readFits(file)
-
                 self.prior.addCatalog(cat, self.config.invariantCovariance,
                                       self.config.sampleFraction, self.config.sampleSeed)
                 # Should be same for all prior catalogs
                 if first:
-                    self.cov = numpy.array(cat.getTable().getMetadata().getArrayDouble('COV')).reshape(6,6)
+                    self.cov = np.array(cat.getTable().getMetadata().getArrayDouble('COV')).reshape(6, 6)
                     self.zBin = cat.getTable().getMetadata().getInt('ZBIN')
                     self.fluxBin = cat.getTable().getMetadata().getInt('NOISEBIN')
-                    first=False
-                    self.log.info('Processing zbin: %d flux: %d'%(self.zBin,self.fluxBin))
-            except  Exception as e:
-                print 'Failed to read',e
+                    first = False
+            except Exception as e:
+                print('Failed to read', e)
                 continue
 
-        self.log.info("Building tree from prior")
         self.prior.prepare()
         self.fluxMin = self.prior.getFluxMin()
         self.fluxMax = self.prior.getFluxMax()
         self.varMin = self.prior.getVarMin()
         self.varMax = self.prior.getVarMax()
+        selectionPqr = self.prior.selectionProbability(self.cov.astype(np.float32))
+        deselect = selectionPqr.copy()
+        deselect[0] = 1 - selectionPqr[0]
+        for i in range(1, 6):
+            deselect[i] *= -1.
+        self.noSelectPqr = deselect
 
-        if self.config.writeNonSelect:
-            self.selectionPqr = self.prior.selectionProbability(self.cov.astype(numpy.float32))
-            deselect = self.selectionPqr.copy()
-            deselect[0] = 1 - self.selectionPqr[0]
-            for i in range(1,6):
-                deselect[i] *= -1.
-            self.noSelectPqr = deselect
-            self.log.info('Probability of not being selected: %s'%self.noSelectPqr)
-
-        if self.config.readZFile is False:
-            self.log.info("Reading redshift file")
-            zFile = pyfits.open(self.config.zFile)[1].data
-
-            self.zRedshift = numpy.zeros(len(zFile))
-            self.zId = zFile[self.config.zId]
-            if self.config.useXY is False:
-                zRa = zFile[self.config.zRa]*numpy.pi/180
-                zDec = zFile[self.config.zDec]*numpy.pi/180
-
-
-                if self.config.useAllZ:
-                    mask = zFile['frankenz_photoz_%s_isnull'%self.config.zField]==False
-                    self.zRedshift[mask] = zFile['frankenz_photoz_%s'%self.config.zField][mask]
-                    mask = (zFile['mizuki_photoz_%s_isnull'%self.config.zField]==False) & (self.zRedshift==0.0)
-                    self.zRedshift[mask] = zFile['mizuki_photoz_%s'%self.config.zField][mask]
-                    mask = (zFile['nnpz_photoz_%s_isnull'%self.config.zField]==False) & (self.zRedshift==0.0)
-                    self.zRedshift[mask] = zFile['nnpz_photoz_%s'%self.config.zField][mask]
-                    mask = (zFile['mlz_photoz_%s_isnull'%self.config.zField]==False) & (self.zRedshift==0.0)
-                    self.zRedshift[mask] = zFile['mlz_photoz_%s'%self.config.zField][mask]
-                else:
-                    mask = zFile['%s_photoz_%s_isnull'%(self.config.zType,self.config.zField)]==False
-                    self.zRedshift[mask] = zFile['%s_photoz_%s'%(self.config.zType,self.config.zField)][mask]
-
-
-
-                    posRef = numpy.dstack([numpy.sin(zDec)*numpy.cos(zRa), numpy.sin(zDec)*numpy.sin(zRa), numpy.sin(zDec)])[0]
-                self.log.info('Building redshift treee')
-                self.zTree = scipy.spatial.cKDTree(posRef)
+        self.log.info("Reading redshift file")
+        zFile = pyfits.open(self.config.zFile)[1].data
+        self.zRedshift = np.zeros(len(zFile))
+        self.zId = zFile[self.config.zId]
+        if self.config.useXY is False:
+            zRa = zFile[self.config.zRa]*np.pi/180
+            zDec = zFile[self.config.zDec]*np.pi/180
+            if self.config.useAllZ:
+                mask = zFile['frankenz_photoz_%s_isnull'%self.config.zField] == False
+                self.zRedshift[mask] = zFile['frankenz_photoz_%s'%self.config.zField][mask]
+                mask = (zFile['mizuki_photoz_%s_isnull'%self.config.zField] == False) & (self.zRedshift == 0.0)
+                self.zRedshift[mask] = zFile['mizuki_photoz_%s'%self.config.zField][mask]
+                mask = (zFile['nnpz_photoz_%s_isnull'%self.config.zField] == False) & (self.zRedshift == 0.0)
+                self.zRedshift[mask] = zFile['nnpz_photoz_%s'%self.config.zField][mask]
+                mask = (zFile['mlz_photoz_%s_isnull'%self.config.zField] == False) & (self.zRedshift == 0.0)
+                self.zRedshift[mask] = zFile['mlz_photoz_%s'%self.config.zField][mask]
             else:
-                zX = zFile[self.config.zRa]
-                zY = zFile[self.config.zDec]
-
-                posRef = numpy.dstack([zX, zY])[0]
-                self.zTree = scipy.spatial.cKDTree(posRef)
-                self.zRedshift = zFile[self.config.zField]
+                mask = zFile['%s_photoz_%s_isnull'%(self.config.zType, self.config.zField)] == False
+                self.zRedshift[mask] = zFile['%s_photoz_%s'%(self.config.zType,self.config.zField)][mask]
+            posRef = np.dstack([np.sin(zDec)*np.cos(zRa), np.sin(zDec)*np.sin(zRa), np.sin(zDec)])[0]
+            self.log.info('Building redshift treee')
+            self.zTree = scipy.spatial.cKDTree(posRef)
+        else:
+            zX = zFile[self.config.zRa]
+            zY = zFile[self.config.zDec]
+            posRef = np.dstack([zX, zY])[0]
+            self.zTree = scipy.spatial.cKDTree(posRef)
+            self.zRedshift = zFile[self.config.zField]
 
     def run(self, dataRef):
         """Main driver
         """
-        self.log.info("Processing %s"% str(dataRef.dataId))
+        self.log.info("Processing %s" % str(dataRef.dataId))
 
         if self.config.checkExists:
             dataRef.dataId['label'] = self.config.priorLabel
             if dataRef.datasetExists(self.dataPrefix+"pqr"):
-                filename = dataRef.get(self.dataPrefix+"pqr_filename")[0]
-                if filename.find('_parent') < 0 :
-                    self.log.info("Skipping %s, file %s exists" % (str(dataRef.dataId), filename))
-                    return
-
-        if self.config.noClobber:
-            dataRef.dataId['label'] = self.config.priorLabel
-            if dataRef.datasetExists(self.dataPrefix+"pqr"):
+                if self.config.noClobber:
                     self.log.info('Pqr already exists %s. skipping' % dataRef.dataId)
                     return
-
-        if self.config.readZFile is True:
-            self.log.info("Reading redshift file")
-            zFile = dataRef.get('deepCoadd_truth', immediate=True)
-
-            self.zRedshift = numpy.zeros(len(zFile))
-            self.zId = zFile[self.config.zId]
-            if self.config.useXY is False:
-                zRa = zFile[self.config.zRa]*numpy.pi/180
-                zDec = zFile[self.config.zDec]*numpy.pi/180
-
-
-                if self.config.useAllZ:
-                    mask = zFile['frankenz_photoz_%s_isnull'%self.config.zField]==False
-                    self.zRedshift[mask] = zFile['frankenz_photoz_%s'%self.config.zField][mask]
-                    mask = (zFile['mizuki_photoz_%s_isnull'%self.config.zField]==False) & (self.zRedshift==0.0)
-                    self.zRedshift[mask] = zFile['mizuki_photoz_%s'%self.config.zField][mask]
-                    mask = (zFile['nnpz_photoz_%s_isnull'%self.config.zField]==False) & (self.zRedshift==0.0)
-                    self.zRedshift[mask] = zFile['nnpz_photoz_%s'%self.config.zField][mask]
-                    mask = (zFile['mlz_photoz_%s_isnull'%self.config.zField]==False) & (self.zRedshift==0.0)
-                    self.zRedshift[mask] = zFile['mlz_photoz_%s'%self.config.zField][mask]
-                else:
-                    mask = zFile['%s_photoz_%s_isnull'%(self.config.zType,self.config.zField)]==False
-                    self.zRedshift[mask] = zFile['%s_photoz_%s'%(self.config.zType,self.config.zField)][mask]
-
-
-
-                    posRef = numpy.dstack([numpy.sin(zDec)*numpy.cos(zRa), numpy.sin(zDec)*numpy.sin(zRa), numpy.sin(zDec)])[0]
-                self.log.info('Building redshift treee')
-                self.zTree = scipy.spatial.cKDTree(posRef)
-            else:
-                zX = zFile[self.config.zRa]
-                zY = zFile[self.config.zDec]
-
-                posRef = numpy.dstack([zX, zY])[0]
-                self.zTree = scipy.spatial.cKDTree(posRef)
-                self.zRedshift = zFile[self.config.zField]
-
-            if self.config.addTruth:
-                self.g1 = zFile['g1']
-                self.g2 = zFile['g2']
-                self.x = zFile['x']
-                self.y = zFile['y']
+                filename = dataRef.get(self.dataPrefix+"pqr_filename")[0]
+                if filename.find('_parent') < 0:
+                    self.log.info("Skipping %s, file %s exists" % (str(dataRef.dataId), filename))
+                    return
 
         inputs = self.readInputs(dataRef)
         if self.config.maxObjects is not None:
             first = self.config.firstObject
-            last = min(self.config.firstObject + self.config.maxObjects,len(inputs.sources))
+            last = min(self.config.firstObject + self.config.maxObjects, len(inputs.sources))
             inputs.sources = inputs.sources[first:last]
 
-        outCat = self.runMeasure(inputs, dataRef)
+        outCat = self.runMeasure(inputs.sources, dataRef)
+        print('Number of sources', len(outCat))
         if len(outCat) == 0:
             self.log.info("No objects processed")
             if self.config.writeEmpty is False:
@@ -470,79 +388,57 @@ class MeasurePqrZTask(MeasureCoaddTask):
 
         self.writeOutputs(dataRef, outCat)
 
-
         return lsst.pipe.base.Struct(outCat=outCat, inputs=inputs)
 
     def runMeasureMulti(self, args):
         self.runMeasure(self, *args)
 
-    def runMeasure(self, inputs, dataRef):
+    def runMeasure(self, sources, dataRef):
 
-        sources = inputs.sources
-        flags = sources.get('bfd.flags')
-        flux = sources.get('bfd.moments')[:,0]
-        noise = sources.get('bfd.momentsCov')[:,0]
-        pqrKey = self.schema.find('bfd.pqr').key
+        flags = sources.get('bfd_flags')
+        flux = sources.get('bfd_moments')[:, 0]
+        noise = sources.get('bfd_momentsCov')[:, 0]
+        pqrKey = self.schema.find('bfd_pqr').key
 
         # Preslection cuts
         pre_sel = flags == False
 
         # redshift selection
         minimumDist = 0.5
-        #zBins = [0, 0.55, 0.8, 1.1, 1.6, 4]
 
-        #zBins = [0, 0.55, 0.8, 1.1, 1.6, 4]
-        #zBins = [0,0.6,0.9, 1.25, 3]
-        #zBins = [0,3]
-        #self.zBin=1
         if self.config.useXY is False:
-            ra = numpy.rad2deg(sources['coord.ra'])
-            dec = numpy.rad2deg(sources['coord.dec'])
+            ra = np.rad2deg(sources['coord_ra'])
+            dec = np.rad2deg(sources['coord_dec'])
             result = matchTreeCatalogs(self.zTree, ra, dec, minimumDist)
         else:
-            ra = numpy.array(sources['bfd.center.x'])
-            dec = numpy.array(sources['bfd.center.y'])
+            ra = np.array(sources['bfd.center.x'])
+            dec = np.array(sources['bfd.center.y'])
             result = matchXYTreeCatalogs(self.zTree, ra, dec, self.config.zMatchDist)
 
-        redshift = numpy.zeros(len(ra))
-        distance = numpy.zeros(len(ra))
+        redshift = np.zeros(len(ra))
+        distance = np.zeros(len(ra))
 
-        redshift[result[0]==False] = -1.
-        distance[result[0]==False] = -1.
+        redshift[result[0] == False] = -1.
+        distance[result[0] == False] = -1.
         redshift[result[0]] = self.zRedshift[result[1]]
         distance[result[0]] = result[2]
-        if self.config.addTruth:
-            g1 = numpy.zeros(len(ra))
-            g2 = numpy.zeros(len(ra))
-            g1[result[0]==False] = -1.
-            g1[result[0]] = self.g1[result[1]]
-            g2[result[0]==False] = -1.
-            g2[result[0]] = self.g2[result[1]]
 
-            x = numpy.zeros(len(ra))
-            y = numpy.zeros(len(ra))
-            x[result[0]==False] = -1.
-            x[result[0]] = self.x[result[1]]
-            y[result[0]==False] = -1.
-            y[result[0]] = self.y[result[1]]
-
-
-        self.log.info("distance length %d,%d,%d"%(len(distance),len(redshift),len(sources)))
+        self.log.info("distance length %d,%d,%d"%(len(distance), len(redshift), len(sources)))
 
         self.log.info("Using redshift bins %s:"%self.config.zBins)
-        redshiftBin = numpy.digitize(redshift, self.config.zBins)
-        redshiftBin[redshiftBin==len(self.config.zBins)] = len(self.config.zBins)-1
+        redshiftBin = np.digitize(redshift, self.config.zBins)
+        redshiftBin[redshiftBin == len(self.config.zBins)] = len(self.config.zBins)-1
 
         if self.config.ignoreZ:
             redshiftBin[:] = self.zBin
 
         if self.config.randomizeZ:
-            numpy.random.shuffle(redshiftBin)
+            np.random.shuffle(redshiftBin)
 
-        noiseBins = numpy.arange(0.05,1.25,0.05)
-        noiseBin = numpy.digitize(noise,noiseBins) - 1
+        noiseBins = np.arange(0.05, 1.25, 0.05)
+        noiseBin = np.digitize(noise, noiseBins) - 1
         # Flux selection
-        sel = numpy.logical_and.reduce((pre_sel,
+        sel = np.logical_and.reduce((pre_sel,
                                         noise > self.varMin,
                                         noise < self.varMax,
                                         flux > self.fluxMin,
@@ -550,56 +446,21 @@ class MeasurePqrZTask(MeasureCoaddTask):
                                         redshiftBin == self.zBin
         ))
         self.log.info("Surviving cuts:")
-        self.log.info("   presel: %d" % numpy.sum(pre_sel))
-        self.log.info("   noise: %d" % numpy.sum((noise > self.varMin)&(noise < self.varMax)))
-        self.log.info("   flux: %d" % numpy.sum((flux > self.fluxMin)&(flux < self.fluxMax)))
-        self.log.info("   redshift: %d" % numpy.sum(redshiftBin == self.zBin))
-        self.log.info("  total:%d" % numpy.sum(sel))
+        self.log.info("   presel: %d" % np.sum(pre_sel))
+        self.log.info("   noise: %d" % np.sum((noise > self.varMin) & (noise < self.varMax)))
+        self.log.info("   flux: %d" % np.sum((flux > self.fluxMin) & (flux < self.fluxMax)))
+        self.log.info("   redshift: %d" % np.sum(redshiftBin == self.zBin))
+        self.log.info("  total:%d" % np.sum(sel))
 
-        outCat =  lsst.afw.table.SourceCatalog(self.schema)
+        outCat = lsst.afw.table.SourceCatalog(self.schema)
 
-        for ii,(srcRecord,dis,zz,noi) in enumerate(zip(sources[sel],distance[sel],redshift[sel],noiseBin[sel])):
-            print noi,self.varMin,self.varMax
+        for ii, (srcRecord, dis, zz, noi) in enumerate(zip(sources[sel], distance[sel], redshift[sel], noiseBin[sel])):
             outRecord = outCat.addNew()
             outRecord.setId(srcRecord.getId())
             outRecord.setRa(srcRecord.getRa())
             outRecord.setDec(srcRecord.getDec())
 
-            if self.config.addTruth:
-                outRecord.set(self.g1Key, g1[sel][ii])
-                outRecord.set(self.g2Key, g2[sel][ii])
-                outRecord.set(self.xKey, x[sel][ii])
-                outRecord.set(self.yKey, y[sel][ii])
-
         self.prior.getPqrCat(sources[sel], outCat, self.config.numProc, self.config.chunk)
-
-        if self.config.writeNonSelect:
-
-            not_sel = sel = (
-                ((pre_sel)&(noise > self.varMin)&(noise < self.varMax)&(redshiftBin == self.zBin)) &
-                ((flux < self.fluxMin)|(flux > self.fluxMax))
-                )
-            self.log.info("Adding non-selection values for %d objects" % numpy.sum(not_sel))
-            for ii,(srcRecord,dis,zz,noi) in enumerate(zip(sources[not_sel],distance[not_sel],redshift[not_sel],noiseBin[not_sel])):
-                outRecord = outCat.addNew()
-                outRecord.setId(srcRecord.getId())
-                outRecord.setRa(srcRecord.getRa())
-                outRecord.setDec(srcRecord.getDec())
-                outRecord.set(self.fluxBinKey, self.fluxBin)
-                outRecord.set(self.zBinKey, self.zBin)
-                outRecord.set(self.disZKey, dis)
-                outRecord.set(self.zKey, zz)
-                outRecord.set(self.noiseBinKey, noi)
-                if self.config.addTruth:
-                    outRecord.set(self.g1Key, g1[not_sel][ii])
-                    outRecord.set(self.g2Key, g2[not_sel][ii])
-                    outRecord.set(self.xKey, x[not_sel][ii])
-                    outRecord.set(self.yKey, y[not_sel][ii])
-
-                outRecord.set(pqrKey, numpy.array(self.noSelectPqr).astype(numpy.float32))
-                outRecord.set(self.flagNSKey, True)
-
-
 
         return outCat
 
@@ -610,3 +471,17 @@ class MeasurePqrZTask(MeasureCoaddTask):
         dataRef.put(outCat, self.dataPrefix+"pqr")
         return
 
+    def selection(self, source, ref):
+        # Don't process blended parent objects
+        if ref.getParent() == 0 and ref.get('deblend_nChild') > 0:
+            return False
+        # For now don't process objects in a blend
+        # if ref.getParent()!=0:
+        #     return False
+        if ref.getFootprint().getArea() > self.config.maxArea:
+            return False
+        if ref.getFootprint().getArea() == 0:
+            return False
+        # if ref.get('classification.extendedness') == 0:
+        #     return False
+        return True

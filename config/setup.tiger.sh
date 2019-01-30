@@ -4,6 +4,7 @@ setup hscPipe 6.7
 setup old_bfd
 setup -jr ./
 setup -jr obs_subaru
-setup -j tmv v0.75
+export TMV_DIR=/tigress/rea3/bfd_update/my_tmv
+
 
 

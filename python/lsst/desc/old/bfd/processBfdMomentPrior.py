@@ -62,6 +62,16 @@ class ProcessBfdMomentPriorTask(BatchParallelTask):
                         continue
                     priorRefList.append(uri)
 
+        for inoise in range(0, 24):
+                for zbin in range(1, 6):
+                    label = 'b%d_selection_z%d' % (inoise, zbin)
+                    try:
+                        uri = patchRef.get('deepCoadd_momentPrior_filename', label=label)[0]
+                    except:
+                        self.log.info('No data for %s %s', patchRef.dataId, label)
+                        continue
+                    priorRefList.append(uri)
+
         with self.logOperation("processing %s" % (patchRef.dataId,)):
             self.momentSummary.run(priorRefList)
 
